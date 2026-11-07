@@ -13,29 +13,29 @@ import telebot
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 # ==========================================
-# ⚙️ الإعدادات الأساسية (التوكن والأيدي والقناة)
+# ⚙️ الإعدادات الأساسية (التوكن وأيدي المطور)
 # ==========================================
-BOT_TOKEN = "6393211947:AAHgM_qZE3GbyLRNLiPpJtvQqaJeQZDF2aE" 
+BOT_TOKEN = "6393211947:AAHgM_qZE3GbyLRNLiPpJtvQqaJeQZDF2aE"
 ADMIN_ID = 5952132218  # أيدي المطور الأساسي
-
-# معرف قناتك للاشتراك الإجباري (اتركه فارغاً "" إذا لا تريد اشتراك إجباري)
-REQUIRED_CHANNEL = "@YourChannelUsername"
 
 # Private Mode: إذا كانت True لن يعمل البوت إلا للمطور حصراً
 PRIVATE_MODE = False
 
 LANG_FILE = "users_lang.json"
 STATS_FILE = "users_stats.json"
+CHANNELS_FILE = "channels.json"
 
 
-def load_json(file_path):
+def load_json(file_path, default=None):
+    if default is None:
+        default = {}
     if os.path.isfile(file_path):
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             pass
-    return {}
+    return default
 
 
 def save_json(file_path, data):
@@ -46,8 +46,9 @@ def save_json(file_path, data):
         pass
 
 
-USER_LANGS = load_json(LANG_FILE)
-USERS_LIST = load_json(STATS_FILE)
+USER_LANGS = load_json(LANG_FILE, {})
+USERS_LIST = load_json(STATS_FILE, {})
+REQUIRED_CHANNELS = load_json(CHANNELS_FILE, [])  # قائمة القنوات الإجبارية المخزنة
 
 
 def register_user(user_id):
@@ -72,11 +73,11 @@ TEXTS = {
             "• أرسل الأمر /avatar لرفع عدة صور لوجهك وتوليد أفاتار احترافي.\n"
             "• لتغيير اللغة في أي وقت أرسل /language"
         ),
-        "force_sub": "⚠️ **عذراً، يجب عليك الاشتراك في قناة البوت أولاً لتتمكن من استخدامه!**\n\nاشترك في القناة ثم اضغط على زر (تحقق من الاشتراك).",
-        "sub_btn": "📢 اشترك في القناة أولاً",
+        "force_sub": "⚠️ **عذراً، يجب عليك الاشتراك في قنوات البوت أولاً لتتمكن من استخدامه!**\n\nاشترك في القنوات أدناه ثم اضغط على زر (تحقق من الاشتراك).",
+        "sub_btn": "📢 اشترك في القناة: {ch}",
         "check_sub_btn": "🔄 تحقق من الاشتراك",
-        "sub_success": "✅ شكراً لاشتراكك! يمكنك استخدام البوت الآن.",
-        "sub_failed": "❌ لم تقم بالاشتراك في القناة بعد!",
+        "sub_success": "✅ شكراً لاشتراكك في جميع القنوات! يمكنك استخدام البوت الآن.",
+        "sub_failed": "❌ لم تقم بالاشتراك في كافة القنوات المطلوبة بعد!",
         "choose_lang": "🌐 **الرجاء اختيار لغتك المفضلة / Please choose your preferred language:**",
         "lang_saved": "✅ تمت بنجاح! لغتك الحالية هي: **العربية**.\nأرسل /start للبدء.",
         "avatar_start": (
@@ -118,11 +119,11 @@ TEXTS = {
             "• Send /avatar to upload multiple face photos and generate a pro avatar.\n"
             "• To change language anytime, send /language"
         ),
-        "force_sub": "⚠️ **Sorry, you must subscribe to the bot's channel first to use it!**\n\nSubscribe to the channel then click (Check Subscription).",
-        "sub_btn": "📢 Subscribe to Channel",
+        "force_sub": "⚠️ **Sorry, you must subscribe to the bot's channels first to use it!**\n\nSubscribe below then click (Check Subscription).",
+        "sub_btn": "📢 Subscribe: {ch}",
         "check_sub_btn": "🔄 Check Subscription",
-        "sub_success": "✅ Thanks for subscribing! You can now use the bot.",
-        "sub_failed": "❌ You haven't subscribed to the channel yet!",
+        "sub_success": "✅ Thanks for subscribing to all channels! You can now use the bot.",
+        "sub_failed": "❌ You haven't subscribed to all required channels yet!",
         "choose_lang": "🌐 **الرجاء اختيار لغتك المفضلة / Please choose your preferred language:**",
         "lang_saved": "✅ Success! Your current language is: **English**.\nSend /start to begin.",
         "avatar_start": (
@@ -340,7 +341,6 @@ def load_proxies(path="proxies.txt"):
     return out
 
 
-# دالة ضغط الصور تلقائياً وتوفير المساحة
 def compress_image(path, max_size=1920):
     try:
         from PIL import Image
@@ -661,24 +661,26 @@ def avatar(farm, image_paths, out, preset=DEFAULT_AVATAR_PRESET):
 
 
 # ==========================================
-# دوال الاشتراك واللغة والأزرار
+# دوال الاشتراك الإجباري الديناميكية
 # ==========================================
 def check_sub(user_id):
-    if not REQUIRED_CHANNEL:
+    if not REQUIRED_CHANNELS:
         return True
-    try:
-        member = bot.get_chat_member(REQUIRED_CHANNEL, user_id)
-        if member.status in ("member", "administrator", "creator"):
-            return True
-    except Exception:
-        pass
-    return False
+    for ch in REQUIRED_CHANNELS:
+        try:
+            member = bot.get_chat_member(ch, user_id)
+            if member.status not in ("member", "administrator", "creator"):
+                return False
+        except Exception:
+            return False
+    return True
 
 
 def sub_keyboard(user_id):
     markup = InlineKeyboardMarkup()
-    channel_link = f"https://t.me/{REQUIRED_CHANNEL.replace('@', '')}"
-    markup.add(InlineKeyboardButton(t(user_id, "sub_btn"), url=channel_link))
+    for ch in REQUIRED_CHANNELS:
+        link = f"https://t.me/{ch.replace('@', '')}"
+        markup.add(InlineKeyboardButton(t(user_id, "sub_btn", ch=ch), url=link))
     markup.add(InlineKeyboardButton(t(user_id, "check_sub_btn"), callback_data="check_sub"))
     return markup
 
@@ -710,6 +712,7 @@ def mode_keyboard(user_id):
 bot = telebot.TeleBot(BOT_TOKEN)
 farm = Farm(load_proxies())
 avatar_sessions = {}
+admin_states = {}  # لتتبع حالة المطور عند إضافة أو حذف قناة
 
 
 def is_allowed(user_id):
@@ -743,6 +746,7 @@ def cmd_start(message):
     bot.reply_to(message, t(uid, "welcome"), parse_mode="Markdown")
 
 
+# لوحة تحكم المطور والتحكم بالقنوات
 @bot.message_handler(commands=["admin"])
 def cmd_admin(message):
     uid = message.from_user.id
@@ -751,14 +755,21 @@ def cmd_admin(message):
         return
 
     total_users = len(USERS_LIST)
+    channels_list = "\n".join([f"• `{ch}`" for ch in REQUIRED_CHANNELS]) if REQUIRED_CHANNELS else "لا توجد قنوات حالياً"
+
+    markup = InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        InlineKeyboardButton("➕ إضافة قناة إجبارية", callback_data="admin:add_ch"),
+        InlineKeyboardButton("➖ حذف قناة إجبارية", callback_data="admin:del_ch"),
+    )
+
     text = (
         "🛠 **لوحة تحكم المطور الخاصة:**\n\n"
         f"👥 إجمالي المستخدمين: `{total_users}`\n"
-        f"👑 أيدي المطور: `{ADMIN_ID}`\n"
-        f"📢 قناة الاشتراك الإجباري: `{REQUIRED_CHANNEL}`\n\n"
-        "البوت يعمل بكامل الكفاءة مع خاصية الضغط والتنظيف التلقائي للملفات."
+        f"👑 أيدي المطور: `{ADMIN_ID}`\n\n"
+        f"📢 **قنوات الاشتراك الإجباري الحالية:**\n{channels_list}"
     )
-    bot.reply_to(message, text, parse_mode="Markdown")
+    bot.reply_to(message, text, reply_markup=markup, parse_mode="Markdown")
 
 
 @bot.message_handler(commands=["avatar"])
@@ -774,6 +785,36 @@ def cmd_avatar(message):
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton(t(uid, "avatar_btn_cancel"), callback_data="avatar:cancel"))
     bot.reply_to(message, t(uid, "avatar_start"), reply_markup=markup, parse_mode="Markdown")
+
+
+@bot.message_handler(content_types=["text"])
+def handle_text(message):
+    uid = message.from_user.id
+    if uid == ADMIN_ID and uid in admin_states:
+        state = admin_states[uid]
+        text = message.text.strip()
+        if state == "waiting_add_ch":
+            if not text.startswith("@"):
+                bot.reply_to(message, "⚠️ يرجى إدخال معرف القناة متبوعاً بـ @ (مثال: @ChannelName)")
+                return
+            if text not in REQUIRED_CHANNELS:
+                REQUIRED_CHANNELS.append(text)
+                save_json(CHANNELS_FILE, REQUIRED_CHANNELS)
+                bot.reply_to(message, f"✅ تم إضافة القناة `{text}` بنجاح للاشتراك الإجباري.", parse_mode="Markdown")
+            else:
+                bot.reply_to(message, "⚠️ هذه القناة مضافة مسبقاً.")
+            admin_states.pop(uid, None)
+            return
+
+        elif state == "waiting_del_ch":
+            if text in REQUIRED_CHANNELS:
+                REQUIRED_CHANNELS.remove(text)
+                save_json(CHANNELS_FILE, REQUIRED_CHANNELS)
+                bot.reply_to(message, f"✅ تم حذف القناة `{text}` بنجاح.", parse_mode="Markdown")
+            else:
+                bot.reply_to(message, "⚠️ هذه القناة غير موجودة في القائمة.")
+            admin_states.pop(uid, None)
+            return
 
 
 @bot.message_handler(content_types=["photo", "document"])
@@ -806,7 +847,7 @@ def handle_photo(message):
         img_path = os.path.join(WORKDIR, f"av_{uid}_{uuid.uuid4().hex[:8]}.jpg")
         with open(img_path, "wb") as f:
             f.write(downloaded)
-        compress_image(img_path)  # ضغط الصورة المؤقتة للأفاتار
+        compress_image(img_path)
         avatar_sessions[uid].append(img_path)
         count = len(avatar_sessions[uid])
 
@@ -851,7 +892,6 @@ def process_single_task(call, mode):
         with open(src_path, "wb") as f:
             f.write(downloaded)
 
-        # ضغط الصورة تلقائياً لتقليل حجمها وتوفير مساحة الاستضافة والسرعة
         compress_image(src_path)
 
         uid_tag = uuid.uuid4().hex[:10]
@@ -898,7 +938,6 @@ def process_single_task(call, mode):
         except Exception:
             pass
     finally:
-        # 🧹 التنظيف التلقائي الفوري لضمان عدم امتلاء الاستضافة وحذف الملفات المؤقتة
         for p in (src_path, out_path):
             if p and os.path.isfile(p):
                 try:
@@ -925,7 +964,6 @@ def process_avatar_task(call, uid, photos):
         except Exception:
             pass
     finally:
-        # 🧹 تنظيف صور تدريب الأفاتار والنتيجة فور الانتهاء تماماً
         for p in photos + [out_path]:
             if p and os.path.isfile(p):
                 try:
@@ -942,6 +980,22 @@ def handle_callbacks(call):
         return
 
     data = call.data
+
+    if data == "admin:add_ch":
+        if uid != ADMIN_ID:
+            return
+        admin_states[uid] = "waiting_add_ch"
+        bot.answer_callback_query(call.id)
+        bot.send_message(call.message.chat.id, "✍️ أرسل الآن معرف القناة التي تريد إضافتها (مثال: `@ChannelName`):")
+        return
+
+    if data == "admin:del_ch":
+        if uid != ADMIN_ID:
+            return
+        admin_states[uid] = "waiting_del_ch"
+        bot.answer_callback_query(call.id)
+        bot.send_message(call.message.chat.id, "✍️ أرسل الآن معرف القناة التي تريد حذفها (مثال: `@ChannelName`):")
+        return
 
     if data.startswith("set_lang:"):
         lang = data.split(":", 1)[1]
@@ -998,11 +1052,11 @@ def handle_callbacks(call):
 
 if __name__ == "__main__":
     print("=" * 55)
-    print("  Remini Telegram Bot (Auto-Compress & Clean) is Running...")
+    print("  Remini Telegram Bot (Dynamic Channels) is Running...")
     print(f"  Admin ID: {ADMIN_ID}")
     print("=" * 55)
     try:
-        bot.send_message(ADMIN_ID, "✅ Remini Bot is running with Auto-Clean storage feature!")
+        bot.send_message(ADMIN_ID, "✅ Remini Bot is running with Dynamic Channels management!")
     except Exception:
         pass
     bot.infinity_polling(timeout=60, long_polling_timeout=30)
